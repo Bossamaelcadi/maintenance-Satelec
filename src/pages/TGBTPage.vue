@@ -60,7 +60,7 @@ const columns: QTableColumn[] = [
   {
     name: 'status',
     required: true,
-    label: 'Conformité',
+    label: 'Statut',
     align: 'center' as const,
     field: 'status',
     sortable: true
@@ -68,19 +68,19 @@ const columns: QTableColumn[] = [
 ];
 
 const controles = ref([
-  { prestation: 'DGPT2 : Fct 1er seuil', status: 0 },
-  { prestation: 'DGPT2 : Fct 2ème seuil', status: 0 },
-  { prestation: 'Contrôle visuel de l\'état des câbles HT/BT', status: 0 },
-  { prestation: 'Contrôle visuel des enroulements', status: 0 },
-  { prestation: 'Contrôle de la serrure interverrouillage', status: 0 },
+  { prestation: 'Contrôle visuel de l\'état du TGBT', status: 0 },
+  { prestation: 'Contrôle étiquetage / repérage', status: 0 },
+  { prestation: 'Contrôle visuel de l\'état des câbles HT/BT sur les divers départs', status: 0 },
+  { prestation: 'Contrôle visuel des MALT (1 connectique par point)', status: 0 },
+  { prestation: 'Contrôle de la présence des schémas électriques', status: 0 },
   { prestation: 'Nettoyage et dépollution de l\'ensemble des constituants', status: 0 },
-  { prestation: 'Contrôle manque d\'huile', status: 0 },
-  { prestation: 'Resserrage des têtes HT', status: 0 },
-  { prestation: 'Contrôle des têtes BT', status: 0 },
   { prestation: 'Resserrage des têtes BT', status: 0 },
-  { prestation: 'Contrôle renvoi température', status: 0 },
-  { prestation: 'Déclenchement BT sur défaut température', status: 0 },
-  { prestation: 'Vérification absence de fuite', status: 0 }
+  { prestation: 'Nettoyage et dépollution du local', status: 0 },
+  { prestation: 'Contrôle de l\'éclairage', status: 0 },
+  { prestation: 'Contrôle de l\'éclairage de sécurité', status: 0 },
+  { prestation: 'Contrôle des obturateurs et des plastrons', status: 0 },
+  { prestation: 'Contrôle de la fermeture de chaque cellule BT', status: 0 },
+  { prestation: 'Pose de l\'étiquette de passage pour maintenance', status: 0 }
 ]);
 </script>
 

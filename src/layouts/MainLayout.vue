@@ -14,8 +14,6 @@
         <q-toolbar-title>
           Transformateur
         </q-toolbar-title>
-
-        <div>Quasar v{{ $q.version }}</div>
       </q-toolbar>
     </q-header>
 
@@ -36,7 +34,23 @@
             title: 'Transformateur',
             caption: 'Outil de transformation',
             icon: 'transform',
-            link: '#'
+            link: { name: 'transformateur' }
+          }"
+        />
+        <EssentialLink
+          v-bind="{
+            title: 'POSTE HT/BT',
+            caption: 'Contrôle du poste',
+            icon: 'electrical_services',
+            link: { name: 'poste-htbt' }
+          }"
+        />
+        <EssentialLink
+          v-bind="{
+            title: 'TGBT',
+            caption: 'Tableau Général Basse Tension',
+            icon: 'power',
+            link: { name: 'tgbt' }
           }"
         />
       </q-list>

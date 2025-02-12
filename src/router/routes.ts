@@ -4,7 +4,23 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
-    children: [{ path: '', component: () => import('pages/TransformateurPage.vue') }],
+    children: [
+      { 
+        path: '',
+        name: 'transformateur',
+        component: () => import('pages/TransformateurPage.vue') 
+      },
+      {
+        path: 'poste-htbt',
+        name: 'poste-htbt',
+        component: () => import('pages/PosteHTBTPage.vue')
+      },
+      {
+        path: 'tgbt',
+        name: 'tgbt',
+        component: () => import('pages/TGBTPage.vue')
+      }
+    ],
   },
 
   // Always leave this as last one,

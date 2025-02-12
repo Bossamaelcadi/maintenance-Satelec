@@ -1,9 +1,9 @@
 <template>
   <q-item
     clickable
-    tag="a"
-    target="_blank"
-    :href="link"
+    :to="link"
+    exact
+    exact-active-class="q-item--active"
   >
     <q-item-section
       v-if="icon"
@@ -20,16 +20,25 @@
 </template>
 
 <script setup lang="ts">
+import type { RouteLocationRaw } from 'vue-router';
+
 export interface EssentialLinkProps {
   title: string;
   caption?: string;
-  link?: string;
+  link?: RouteLocationRaw;
   icon?: string;
-};
+}
 
 withDefaults(defineProps<EssentialLinkProps>(), {
   caption: '',
-  link: '#',
+  link: () => ({ path: '/' }),
   icon: '',
 });
 </script>
+
+<style scoped>
+.q-item--active {
+  color: var(--q-primary);
+  background: var(--q-primary-fade);
+}
+</style>
