@@ -1,6 +1,29 @@
 <template>
   <q-page padding>
     <div class="q-pa-sm">
+      <!-- New input fields section -->
+      <div class="row q-col-gutter-md q-mb-md">
+        <div class="col-12 col-md-6">
+          <q-input outlined v-model="formData.client" label="Client" />
+        </div>
+        <div class="col-12 col-md-6">
+          <q-input outlined v-model="formData.site" label="Site" />
+        </div>
+        <div class="col-12 col-md-6">
+          <q-input outlined v-model="formData.nomTransformateur" label="Nom du transformateur" />
+        </div>
+        <div class="col-12 col-md-6">
+          <q-input outlined v-model="formData.puissance" label="Puissance" />
+        </div>
+        <div class="col-12">
+          <q-file outlined v-model="formData.photo" label="Photo" accept="image/*">
+            <template v-slot:prepend>
+              <q-icon name="attach_file" />
+            </template>
+          </q-file>
+        </div>
+      </div>
+
       <h5 class="text-h6 q-mt-none q-mb-md text-center">CONTRÔLES APRÈS CONSIGNATION DU POSTE</h5>
 
       <q-table
@@ -32,12 +55,24 @@
           </q-tr>
         </template>
       </q-table>
+
+      <div class="q-mt-md">
+        <q-input
+          outlined
+          v-model="formData.remarques"
+          label="Remarques"
+          type="textarea"
+          rows="4"
+        />
+      </div>
+
       <div class="q-mt-md flex justify-center">
         <q-btn
           color="primary"
           icon="picture_as_pdf"
           label="Générer le PDF"
           class="q-px-md"
+          @click="generatePDF"
         />
       </div>
     </div>
@@ -46,7 +81,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { date } from 'quasar';
 import type { QTableColumn } from 'quasar';
+import { generateTransformateurPDF } from 'src/services/pdfGenerator';
 
 const columns: QTableColumn[] = [
   {
@@ -82,6 +119,27 @@ const controles = ref([
   { prestation: 'Déclenchement BT sur défaut température', status: 0 },
   { prestation: 'Vérification absence de fuite', status: 0 }
 ]);
+
+const generatePDF = async () => {
+  const pdfDoc = await generateTransformateurPDF({
+    ...formData.value,
+    controles: controles.value.map(c => ({ ...c, type: 'toggle' }))
+  });
+  await new Promise<void>((resolve) => {
+    const filename = `rapport-maintenance-transformateur_${date.formatDate(new Date(), 'YYYY-MM-DD_HH-mm')}.pdf`;
+    pdfDoc.download(filename);
+    resolve();
+  });
+};
+
+const formData = ref({
+  client: '',
+  site: '',
+  nomTransformateur: '',
+  puissance: '',
+  photo: null,
+  remarques: ''
+});
 </script>
 
 <style scoped>

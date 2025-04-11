@@ -19,6 +19,16 @@ const routes: RouteRecordRaw[] = [
         path: 'tgbt',
         name: 'tgbt',
         component: () => import('pages/TGBTPage.vue')
+      },
+      {
+        path: 'borne-de-recharge',
+        name: 'borne-de-recharge',
+        component: () => import('pages/BorneDeChargePage.vue')
+      },
+      {
+        path: 'historique-pdf',
+        name: 'historique-pdf',
+        component: () => import('pages/HistoriquePDF.vue')
       }
     ],
   },

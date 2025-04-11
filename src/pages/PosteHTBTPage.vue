@@ -1,6 +1,37 @@
 <template>
   <q-page padding>
     <div class="q-pa-sm">
+      <!-- New input fields section -->
+      <div class="row q-col-gutter-md q-mb-md">
+        <div class="col-12 col-md-6">
+          <q-input outlined v-model="formData.client" label="Client" />
+        </div>
+        <div class="col-12 col-md-6">
+          <q-input outlined v-model="formData.site" label="Site" />
+        </div>
+        <div class="col-12 col-md-6">
+          <q-input outlined v-model="formData.nomPoste" label="Nom du poste" />
+        </div>
+        <div class="col-12 col-md-6">
+          <q-input 
+            outlined 
+            v-model="formData.nombreCellules" 
+            label="Nombre de cellules" 
+            type="number"
+          />
+        </div>
+        <div class="col-12 col-md-6">
+          <q-input outlined v-model="formData.typeCellule" label="Type de cellule" />
+        </div>
+        <div class="col-12">
+          <q-file outlined v-model="formData.photo" label="Photo" accept="image/*">
+            <template v-slot:prepend>
+              <q-icon name="attach_file" />
+            </template>
+          </q-file>
+        </div>
+      </div>
+
       <h5 class="text-h6 q-mt-none q-mb-md text-center">CONTRÔLES APRÈS CONSIGNATION DU POSTE</h5>
 
       <!-- État général du poste -->
@@ -106,12 +137,23 @@
           </template>
         </q-table>
       </div>
+      <div class="q-mt-md">
+        <q-input
+          outlined
+          v-model="formData.remarques"
+          label="Remarques"
+          type="textarea"
+          rows="4"
+        />
+      </div>
+
       <div class="q-mt-md flex justify-center">
         <q-btn
           color="primary"
           icon="picture_as_pdf"
           label="Générer le PDF"
           class="q-px-md"
+          @click="generatePDF"
         />
       </div>
     </div>
@@ -120,7 +162,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { date } from 'quasar';
 import type { QTableColumn } from 'quasar';
+import { generatePosteHTBTPDF } from 'src/services/pdfGenerator';
 
 const columns: QTableColumn[] = [
   {
@@ -140,6 +184,16 @@ const columns: QTableColumn[] = [
     sortable: true
   }
 ];
+
+const formData = ref({
+  client: '',
+  site: '',
+  nomPoste: '',
+  nombreCellules: 0,
+  typeCellule: '',
+  photo: null,
+  remarques: ''
+});
 
 const etatGeneralControles = ref([
   { prestation: 'Verrouillage (État des serrures, …)', status: 0 },
@@ -161,6 +215,18 @@ const cellulesControles = ref([
   { prestation: 'Serrage des connexions', status: 0 },
   { prestation: 'Graissage des couteaux', status: 0 }
 ]);
+
+const generatePDF = async () => {
+  const pdfDoc = await generatePosteHTBTPDF({
+    ...formData.value,
+    controles: [...etatGeneralControles.value, ...securiteControles.value, ...cellulesControles.value].map(c => ({ ...c, type: 'toggle' }))
+  });
+  await new Promise<void>((resolve) => {
+    const filename = `rapport-maintenance-poste-htbt_${date.formatDate(new Date(), 'YYYY-MM-DD_HH-mm')}.pdf`;
+    pdfDoc.download(filename);
+    resolve();
+  });
+};
 </script>
 
 <style scoped>

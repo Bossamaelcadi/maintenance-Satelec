@@ -53,6 +53,22 @@
             link: { name: 'tgbt' }
           }"
         />
+        <EssentialLink
+          v-bind="{
+            title: 'Borne de recharge',
+            caption: 'Contrôle de la borne',
+            icon: 'power',
+            link: { name: 'borne-de-recharge' }
+          }"
+        />
+        <EssentialLink
+          v-bind="{
+            title: 'Historique PDF',
+            caption: 'Historique des rapports générés',
+            icon: 'history',
+            link: { name: 'historique-pdf' }
+          }"
+        />
       </q-list>
     </q-drawer>
 
