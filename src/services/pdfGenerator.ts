@@ -1,4 +1,5 @@
-import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import type { TDocumentDefinitions, Content, ContentStack } from 'pdfmake/interfaces';
+import { date } from 'quasar';
 
 // A reference to pdfMake library instance, initialized to null.
 // It will be dynamically imported and assigned when needed.
@@ -24,8 +25,10 @@ type TCreatedPdf = {
 export interface MaintenanceData {
   client?: string;
   site?: string;
-  photo?: File | null;
+  photos?: Array<File | string | null>;
+  photo?: File | string | null; // Keep for backward compatibility
   remarques?: string;
+  signature?: string; // Base64 string représentant l'image de la signature
   controles: Array<{
     prestation: string;
     status?: number;
@@ -49,10 +52,37 @@ interface TGBTData extends MaintenanceData {
   nomTGBT?: string;
 }
 
+interface TDData extends MaintenanceData {
+  nomTD?: string;
+}
+
 interface BorneRechargeData extends MaintenanceData {
   lieuIntervention?: string;
   typeBorne?: string;
   numeroBorne?: number;
+}
+
+interface BorneIRVEData extends MaintenanceData {
+  client?: string;
+  site?: string;
+  
+  // Interrupteur section
+  interrupteurIntensiteVolts?: number;
+  interrupteurLk3?: string;
+  interrupteurLk1?: string;
+  interrupteurPhotos?: Array<File | string | null>;
+  
+  // Cable section
+  cableLongueur?: string;
+  cableSection?: string;
+  cableType?: string;
+  cableModePose?: string;
+  cableNbCircuitAdjacent?: string;
+  cablePhotos?: Array<File | string | null>;
+  
+  // Borne section
+  bornePuissance?: number;
+  bornePhotos?: Array<File | string | null>;
 }
 
 const getStatusText = (status: number | undefined) => {
@@ -84,13 +114,55 @@ const getControlesTable = (controles: MaintenanceData['controles']) => {
 
 const getCommonContent = async (data: MaintenanceData) => {
   const content: TDocumentDefinitions['content'] = [];
-
-  if (data.photo) {
-    const reader = new FileReader();
-    const imageDataUrl = await new Promise<string>((resolve) => {
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(data.photo as File);
-    });
+  
+  // Handle photos array (new method)
+  if (data.photos && data.photos.length > 0) {
+    for (let i = 0; i < Math.min(data.photos.length, 2); i++) { // Limit to 2 photos
+      const photo = data.photos[i];
+      if (!photo) continue;
+      
+      let imageDataUrl: string;
+      if (photo instanceof File) {
+        const reader = new FileReader();
+        imageDataUrl = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(photo);
+        });
+      } else {
+        imageDataUrl = photo;
+      }
+      
+      content.push({
+        stack: [
+          {
+            image: imageDataUrl,
+            width: 150,
+            alignment: 'center'
+          },
+          {
+            text: `Photo ${i + 1} de l'intervention`,
+            alignment: 'center',
+            italics: true,
+            margin: [0, 5, 0, 20]
+          }
+        ],
+        margin: [0, 10, 0, 20]
+      });
+    }
+  }
+  // Handle single photo (for backward compatibility)
+  else if (data.photo) {
+    let imageDataUrl: string;
+    if (data.photo instanceof File) {
+      const reader = new FileReader();
+      imageDataUrl = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(data.photo as File);
+      });
+    } else {
+      // If photo is already a base64 string, use it directly
+      imageDataUrl = data.photo;
+    }
 
     content.push({
       unbreakable: true,
@@ -117,11 +189,26 @@ const getCommonContent = async (data: MaintenanceData) => {
       { text: data.remarques, margin: [0, 0, 0, 20] }
     );
   }
+  
+  // Ajouter la signature si elle existe
+  if (data.signature) {
+    content.push(
+      { text: 'Signature :', style: 'subheader', margin: [0, 20, 0, 10] },
+      {
+        image: data.signature,
+        width: 200,
+        alignment: 'left',
+        margin: [0, 0, 0, 20]
+      }
+    );
+  }
 
   return content;
 };
 
-export const generatePDF = async (data: MaintenanceData, type: 'transformateur' | 'poste-htbt' | 'tgbt' | 'borne-recharge') => {
+export const generatePDF = async (data: MaintenanceData, type: 'transformateur' | 'poste-htbt' | 'tgbt' | 'td' | 'borne-recharge' | 'borne-irve') => {
+  await savePDFHistory(data, type);
+  
   switch (type) {
     case 'transformateur':
       return generateTransformateurPDF(data);
@@ -129,18 +216,99 @@ export const generatePDF = async (data: MaintenanceData, type: 'transformateur' 
       return generatePosteHTBTPDF(data);
     case 'tgbt':
       return generateTGBTPDF(data);
+    case 'td':
+      return generateTDPDF(data as TDData);
     case 'borne-recharge':
       return generateBorneRechargePDF(data);
+    case 'borne-irve':
+      return generateBorneIRVEPDF(data);
     default:
       throw new Error('Type de document non supporté');
   }
 };
 
-const savePDFHistory = (data: MaintenanceData, type: 'transformateur' | 'poste-htbt' | 'tgbt' | 'borne-recharge') => {
+const savePDFHistory = async (data: MaintenanceData, type: 'transformateur' | 'poste-htbt' | 'tgbt' | 'td' | 'borne-recharge' | 'borne-irve') => {
+  // Convert File to base64 if it exists
+  const dataToSave = { ...data };
+  
+  // Convert photo to base64 (for backward compatibility)
+  if (dataToSave.photo instanceof File) {
+    const reader = new FileReader();
+    dataToSave.photo = await new Promise<string>((resolve) => {
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(dataToSave.photo as File);
+    });
+  }
+  
+  // Convert photos array to base64 if they exist
+  if (dataToSave.photos && dataToSave.photos.length > 0) {
+    const convertedPhotos = [];
+    for (const photo of dataToSave.photos) {
+      if (photo instanceof File) {
+        const reader = new FileReader();
+        const base64Photo = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(photo);
+        });
+        convertedPhotos.push(base64Photo);
+      } else {
+        convertedPhotos.push(photo);
+      }
+    }
+    dataToSave.photos = convertedPhotos;
+  }
+  
+  // Traiter les tableaux d'images spécifiques à la borne IRVE
+  // Fonction utilitaire pour convertir un tableau de photos
+  const convertPhotoArray = async (photoArray: Array<File | string | null> | undefined) => {
+    if (!photoArray || photoArray.length === 0) return photoArray;
+    
+    const convertedArray = [];
+    for (const photo of photoArray) {
+      if (photo instanceof File) {
+        const reader = new FileReader();
+        const base64Photo = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(photo);
+        });
+        convertedArray.push(base64Photo);
+      } else {
+        convertedArray.push(photo);
+      }
+    }
+    return convertedArray;
+  };
+  
+  // Convertir les tableaux de photos pour la borne IRVE
+  if (type === 'borne-irve') {
+    const borneIRVEData = dataToSave as unknown as BorneIRVEData;
+    
+    if (borneIRVEData.interrupteurPhotos) {
+      const convertedPhotos = await convertPhotoArray(borneIRVEData.interrupteurPhotos);
+      if (convertedPhotos) {
+        borneIRVEData.interrupteurPhotos = convertedPhotos;
+      }
+    }
+    
+    if (borneIRVEData.cablePhotos) {
+      const convertedPhotos = await convertPhotoArray(borneIRVEData.cablePhotos);
+      if (convertedPhotos) {
+        borneIRVEData.cablePhotos = convertedPhotos;
+      }
+    }
+    
+    if (borneIRVEData.bornePhotos) {
+      const convertedPhotos = await convertPhotoArray(borneIRVEData.bornePhotos);
+      if (convertedPhotos) {
+        borneIRVEData.bornePhotos = convertedPhotos;
+      }
+    }
+  }
+  
   const historyItem = {
     date: new Date().toISOString(),
     type,
-    formData: data
+    formData: dataToSave
   };
 
   const history = localStorage.getItem('pdfHistory');
@@ -150,43 +318,51 @@ const savePDFHistory = (data: MaintenanceData, type: 'transformateur' | 'poste-h
 };
 
 export const generateTransformateurPDF = async (data: TransformateurData): Promise<TCreatedPdf> => {
-  savePDFHistory(data, 'transformateur');
+  await savePDFHistory(data, 'transformateur');
   const docDefinition: TDocumentDefinitions = {
-    content: [
-      { text: 'Rapport de maintenance - Transformateur', style: 'header' },
-      { text: `Date: ${new Date().toLocaleDateString()}`, margin: [0, 0, 0, 20] },
-      { text: 'Informations générales :', style: 'subheader' },
-      {
-        ul: [
-          `Client : ${data.client || 'Non spécifié'}`,
-          `Site : ${data.site || 'Non spécifié'}`,
-          `Nom du transformateur : ${data.nomTransformateur || 'Non spécifié'}`,
-          `Puissance : ${data.puissance || 'Non spécifiée'}`
-        ]
-      },
-      { text: 'Contrôles effectués :', style: 'subheader', margin: [0, 20, 0, 10] },
-      getControlesTable(data.controles),
-      ...(await getCommonContent(data))
-    ],
+    pageSize: 'A4',
+    pageOrientation: 'portrait',
+    pageMargins: [40, 60, 40, 60],
     styles: {
-      header: {
-        fontSize: 22,
-        bold: true,
+      header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10], alignment: 'center' as const },
+      subheader: { fontSize: 16, bold: true, margin: [0, 10, 0, 5] },
+      tableHeader: { bold: true, fontSize: 12, color: 'black' }
+    },
+    info: {
+      title: 'Rapport de maintenance - Transformateur',
+      author: 'Satelec',
+      subject: 'Maintenance Transformateur',
+      creator: 'Satelec Application'
+    },
+    content: [
+      { text: 'RAPPORT DE MAINTENANCE', style: 'header' },
+      { text: 'TRANSFORMATEUR', style: 'header', margin: [0, 0, 0, 20] },
+      {
+        columns: [
+          [
+            { text: 'Client:', bold: true },
+            { text: data.client || 'Non spécifié', margin: [0, 0, 0, 10] },
+            { text: 'Nom du transformateur:', bold: true },
+            { text: data.nomTransformateur || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ],
+          [
+            { text: 'Site:', bold: true },
+            { text: data.site || 'Non spécifié', margin: [0, 0, 0, 10] },
+            { text: 'Puissance:', bold: true },
+            { text: data.puissance || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ]
+        ],
         margin: [0, 0, 0, 20]
       },
-      subheader: {
-        fontSize: 16,
-        bold: true,
-        margin: [0, 10, 0, 5]
-      },
-      tableHeader: {
-        bold: true,
-        fontSize: 13
+      { text: 'CONTRÔLES APRÈS CONSIGNATION DU POSTE', style: 'subheader', margin: [0, 0, 0, 10] },
+      getControlesTable(data.controles),
+      ...await getCommonContent(data),
+      {
+        text: `Date d'intervention: ${date.formatDate(new Date(), 'DD/MM/YYYY')}`,
+        margin: [0, 30, 0, 0],
+        alignment: 'right' as const
       }
-    },
-    defaultStyle: {
-      fontSize: 12
-    }
+    ]
   };
 
   const pdfMakeInstance = await initPdfMake();
@@ -194,44 +370,53 @@ export const generateTransformateurPDF = async (data: TransformateurData): Promi
 };
 
 export const generatePosteHTBTPDF = async (data: PosteHTBTData): Promise<TCreatedPdf> => {
-  savePDFHistory(data, 'poste-htbt');
+  await savePDFHistory(data, 'poste-htbt');
   const docDefinition: TDocumentDefinitions = {
-    content: [
-      { text: 'Rapport de maintenance - Poste HT/BT', style: 'header' },
-      { text: `Date: ${new Date().toLocaleDateString()}`, margin: [0, 0, 0, 20] },
-      { text: 'Informations générales :', style: 'subheader' },
-      {
-        ul: [
-          `Client : ${data.client || 'Non spécifié'}`,
-          `Site : ${data.site || 'Non spécifié'}`,
-          `Nom du poste : ${data.nomPoste || 'Non spécifié'}`,
-          `Nombre de cellules : ${data.nombreCellules || 'Non spécifié'}`,
-          `Type de cellule : ${data.typeCellule || 'Non spécifié'}`
-        ]
-      },
-      { text: 'Contrôles effectués :', style: 'subheader', margin: [0, 20, 0, 10] },
-      getControlesTable(data.controles),
-      ...(await getCommonContent(data))
-    ],
+    pageSize: 'A4',
+    pageOrientation: 'portrait',
+    pageMargins: [40, 60, 40, 60],
     styles: {
-      header: {
-        fontSize: 22,
-        bold: true,
+      header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10], alignment: 'center' as const },
+      subheader: { fontSize: 16, bold: true, margin: [0, 10, 0, 5] },
+      tableHeader: { bold: true, fontSize: 12, color: 'black' }
+    },
+    info: {
+      title: 'Rapport de maintenance - Poste HT/BT',
+      author: 'Satelec',
+      subject: 'Maintenance Poste HT/BT',
+      creator: 'Satelec Application'
+    },
+    content: [
+      { text: 'RAPPORT DE MAINTENANCE', style: 'header' },
+      { text: 'POSTE HT/BT', style: 'header', margin: [0, 0, 0, 20] },
+      {
+        columns: [
+          [
+            { text: 'Client:', bold: true },
+            { text: data.client || 'Non spécifié', margin: [0, 0, 0, 10] },
+            { text: 'Nom du poste:', bold: true },
+            { text: data.nomPoste || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ],
+          [
+            { text: 'Site:', bold: true },
+            { text: data.site || 'Non spécifié', margin: [0, 0, 0, 10] },
+            { text: 'Nombre de cellules:', bold: true },
+            { text: data.nombreCellules || 'Non spécifié', margin: [0, 0, 0, 10] },
+            { text: 'Type de cellule:', bold: true },
+            { text: data.typeCellule || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ]
+        ],
         margin: [0, 0, 0, 20]
       },
-      subheader: {
-        fontSize: 16,
-        bold: true,
-        margin: [0, 10, 0, 5]
-      },
-      tableHeader: {
-        bold: true,
-        fontSize: 13
+      { text: 'CONTRÔLES APRÈS CONSIGNATION DU POSTE', style: 'subheader', margin: [0, 0, 0, 10] },
+      getControlesTable(data.controles),
+      ...await getCommonContent(data),
+      {
+        text: `Date d'intervention: ${date.formatDate(new Date(), 'DD/MM/YYYY')}`,
+        margin: [0, 30, 0, 0],
+        alignment: 'right' as const
       }
-    },
-    defaultStyle: {
-      fontSize: 12
-    }
+    ]
   };
 
   const pdfMakeInstance = await initPdfMake();
@@ -239,42 +424,99 @@ export const generatePosteHTBTPDF = async (data: PosteHTBTData): Promise<TCreate
 };
 
 export const generateTGBTPDF = async (data: TGBTData): Promise<TCreatedPdf> => {
-  savePDFHistory(data, 'tgbt');
+  await savePDFHistory(data, 'tgbt');
   const docDefinition: TDocumentDefinitions = {
-    content: [
-      { text: 'Rapport de maintenance - TGBT', style: 'header' },
-      { text: `Date: ${new Date().toLocaleDateString()}`, margin: [0, 0, 0, 20] },
-      { text: 'Informations générales :', style: 'subheader' },
-      {
-        ul: [
-          `Client : ${data.client || 'Non spécifié'}`,
-          `Site : ${data.site || 'Non spécifié'}`,
-          `Nom du TGBT : ${data.nomTGBT || 'Non spécifié'}`
-        ]
-      },
-      { text: 'Contrôles effectués :', style: 'subheader', margin: [0, 20, 0, 10] },
-      getControlesTable(data.controles),
-      ...(await getCommonContent(data))
-    ],
+    pageSize: 'A4',
+    pageOrientation: 'portrait',
+    pageMargins: [40, 60, 40, 60],
     styles: {
-      header: {
-        fontSize: 22,
-        bold: true,
+      header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10], alignment: 'center' as const },
+      subheader: { fontSize: 16, bold: true, margin: [0, 10, 0, 5] },
+      tableHeader: { bold: true, fontSize: 12, color: 'black' }
+    },
+    info: {
+      title: 'Rapport de maintenance - TGBT',
+      author: 'Satelec',
+      subject: 'Maintenance TGBT',
+      creator: 'Satelec Application'
+    },
+    content: [
+      { text: 'RAPPORT DE MAINTENANCE', style: 'header' },
+      { text: 'TABLEAU GÉNÉRAL BASSE TENSION', style: 'header', margin: [0, 0, 0, 20] },
+      {
+        columns: [
+          [
+            { text: 'Client:', bold: true },
+            { text: data.client || 'Non spécifié', margin: [0, 0, 0, 10] },
+            { text: 'Nom du TGBT:', bold: true },
+            { text: data.nomTGBT || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ],
+          [
+            { text: 'Site:', bold: true },
+            { text: data.site || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ]
+        ],
         margin: [0, 0, 0, 20]
       },
-      subheader: {
-        fontSize: 16,
-        bold: true,
-        margin: [0, 10, 0, 5]
-      },
-      tableHeader: {
-        bold: true,
-        fontSize: 13
+      { text: 'CONTRÔLES APRÈS CONSIGNATION', style: 'subheader', margin: [0, 0, 0, 10] },
+      getControlesTable(data.controles),
+      ...await getCommonContent(data),
+      {
+        text: `Date d'intervention: ${date.formatDate(new Date(), 'DD/MM/YYYY')}`,
+        margin: [0, 30, 0, 0],
+        alignment: 'right' as const
       }
+    ]
+  };
+
+  const pdfMakeInstance = await initPdfMake();
+  return pdfMakeInstance.createPdf(docDefinition);
+};
+
+export const generateTDPDF = async (data: TDData): Promise<TCreatedPdf> => {
+  await savePDFHistory(data, 'td');
+  const docDefinition: TDocumentDefinitions = {
+    pageSize: 'A4',
+    pageOrientation: 'portrait',
+    pageMargins: [40, 60, 40, 60],
+    styles: {
+      header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10], alignment: 'center' as const },
+      subheader: { fontSize: 16, bold: true, margin: [0, 10, 0, 5] },
+      tableHeader: { bold: true, fontSize: 12, color: 'black' }
     },
-    defaultStyle: {
-      fontSize: 12
-    }
+    info: {
+      title: 'Rapport de maintenance - TD',
+      author: 'Satelec',
+      subject: 'Maintenance TD',
+      creator: 'Satelec Application'
+    },
+    content: [
+      { text: 'RAPPORT DE MAINTENANCE', style: 'header' },
+      { text: 'TABLEAU DE DISTRIBUTION', style: 'header', margin: [0, 0, 0, 20] },
+      {
+        columns: [
+          [
+            { text: 'Client:', bold: true },
+            { text: data.client || 'Non spécifié', margin: [0, 0, 0, 10] },
+            { text: 'Nom du TD:', bold: true },
+            { text: data.nomTD || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ],
+          [
+            { text: 'Site:', bold: true },
+            { text: data.site || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ]
+        ],
+        margin: [0, 0, 0, 20]
+      },
+      { text: 'CONTRÔLES APRÈS CONSIGNATION', style: 'subheader', margin: [0, 0, 0, 10] },
+      getControlesTable(data.controles),
+      ...await getCommonContent(data),
+      {
+        text: `Date d'intervention: ${date.formatDate(new Date(), 'DD/MM/YYYY')}`,
+        margin: [0, 30, 0, 0],
+        alignment: 'right' as const
+      }
+    ]
   };
 
   const pdfMakeInstance = await initPdfMake();
@@ -282,44 +524,314 @@ export const generateTGBTPDF = async (data: TGBTData): Promise<TCreatedPdf> => {
 };
 
 export const generateBorneRechargePDF = async (data: BorneRechargeData): Promise<TCreatedPdf> => {
-  savePDFHistory(data, 'borne-recharge');
+  await savePDFHistory(data, 'borne-recharge');
   const docDefinition: TDocumentDefinitions = {
+    pageSize: 'A4',
+    pageOrientation: 'portrait',
+    pageMargins: [40, 60, 40, 60],
+    styles: {
+      header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10], alignment: 'center' as const },
+      subheader: { fontSize: 16, bold: true, margin: [0, 10, 0, 5] },
+      tableHeader: { bold: true, fontSize: 12, color: 'black' }
+    },
+    info: {
+      title: 'Rapport de maintenance - Borne de Recharge',
+      author: 'Satelec',
+      subject: 'Maintenance Borne de Recharge',
+      creator: 'Satelec Application'
+    },
     content: [
-      { text: 'Rapport de maintenance - Borne de recharge', style: 'header' },
-      { text: `Date: ${new Date().toLocaleDateString()}`, margin: [0, 0, 0, 20] },
-      { text: 'Informations générales :', style: 'subheader' },
+      { text: 'RAPPORT DE MAINTENANCE', style: 'header' },
+      { text: 'BORNE DE RECHARGE', style: 'header', margin: [0, 0, 0, 20] },
       {
-        ul: [
-          `Lieu d'intervention : ${data.lieuIntervention || 'Non spécifié'}`,
-          `Type de borne : ${data.typeBorne || 'Non spécifié'}`,
-          `Numéro de la borne : ${data.numeroBorne || 'Non spécifié'}`
-        ]
+        columns: [
+          [
+            { text: 'Lieu d\'intervention:', bold: true },
+            { text: data.lieuIntervention || 'Non spécifié', margin: [0, 0, 0, 10] },
+            { text: 'Type de borne:', bold: true },
+            { text: data.typeBorne || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ],
+          [
+            { text: 'Numéro de la borne:', bold: true },
+            { text: data.numeroBorne !== undefined ? data.numeroBorne.toString() : 'Non spécifié', margin: [0, 0, 0, 10] }
+          ]
+        ],
+        margin: [0, 0, 0, 20]
       },
-      { text: 'Contrôles effectués :', style: 'subheader', margin: [0, 20, 0, 10] },
+      { text: 'MAINTENANCE DE LA BORNE', style: 'subheader', margin: [0, 0, 0, 10] },
       getControlesTable(data.controles),
-      ...(await getCommonContent(data))
-    ],
+      ...await getCommonContent(data),
+      {
+        text: `Date d'intervention: ${date.formatDate(new Date(), 'DD/MM/YYYY')}`,
+        margin: [0, 30, 0, 0],
+        alignment: 'right' as const
+      }
+    ]
+  };
+
+  const pdfMakeInstance = await initPdfMake();
+  return pdfMakeInstance.createPdf(docDefinition);
+};
+
+export const generateBorneIRVEPDF = async (data: BorneIRVEData): Promise<TCreatedPdf> => {
+  await savePDFHistory(data, 'borne-irve');
+  const pdfMake = await initPdfMake();
+  if (!pdfMake) throw new Error('Failed to initialize pdfMake');
+
+  // Common document styles and default settings
+  const documentDefinition: TDocumentDefinitions = {
+    pageSize: 'A4',
+    pageOrientation: 'portrait',
+    pageMargins: [40, 60, 40, 60],
     styles: {
       header: {
-        fontSize: 22,
+        fontSize: 18,
         bold: true,
-        margin: [0, 0, 0, 20]
+        margin: [0, 0, 0, 10],
+        alignment: 'center' as const
       },
       subheader: {
         fontSize: 16,
         bold: true,
         margin: [0, 10, 0, 5]
       },
+      sectionTitle: {
+        fontSize: 14,
+        bold: true,
+        margin: [0, 15, 0, 10]
+      },
       tableHeader: {
         bold: true,
-        fontSize: 13
+        fontSize: 12,
+        color: 'black'
       }
     },
-    defaultStyle: {
-      fontSize: 12
-    }
+    info: {
+      title: 'Rapport de maintenance - Borne IRVE',
+      author: 'Satelec',
+      subject: 'Maintenance Borne IRVE',
+      creator: 'Satelec Application'
+    },
+    content: [
+      { text: 'RAPPORT DE MAINTENANCE', style: 'header' },
+      { text: 'BORNE IRVE', style: 'header', margin: [0, 0, 0, 20] },
+      
+      // Client and Site
+      {
+        columns: [
+          [
+            { text: 'Client:', bold: true },
+            { text: data.client || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ],
+          [
+            { text: 'Site:', bold: true },
+            { text: data.site || 'Non spécifié', margin: [0, 0, 0, 10] }
+          ]
+        ],
+        margin: [0, 0, 0, 20]
+      },
+      
+      // Interrupteur du TD Borne IRVE
+      { text: 'Interrupteur du TD Borne IRVE', style: 'sectionTitle' },
+      {
+        layout: 'lightHorizontalLines',
+        table: {
+          headerRows: 1,
+          widths: ['*', '*'],
+          body: [
+            [{ text: 'Paramètre', style: 'tableHeader' }, { text: 'Valeur', style: 'tableHeader' }],
+            ['Intensité', `${data.interrupteurIntensiteVolts || ''} Volts`],
+            ['lk3', data.interrupteurLk3 || ''],
+            ['lk1', data.interrupteurLk1 || '']
+          ]
+        },
+        margin: [0, 0, 0, 15]
+      },
+      
+      // Interrupteur Photos
+      {
+        text: 'Photos de l\'interrupteur:',
+        style: 'subheader',
+        margin: [0, 10, 0, 5],
+        pageBreak: 'before'
+      },
+      ...await (async () => {
+        const content: Content[] = [];
+        if (data.interrupteurPhotos && data.interrupteurPhotos.length > 0) {
+          for (let i = 0; i < Math.min(data.interrupteurPhotos.length, 2); i++) {
+            const photo = data.interrupteurPhotos[i];
+            if (!photo) continue;
+            
+            let imageDataUrl: string;
+            if (photo instanceof File) {
+              const reader = new FileReader();
+              imageDataUrl = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(photo);
+              });
+            } else {
+              imageDataUrl = photo;
+            }
+            
+            const stackItem: ContentStack = {
+              stack: [
+                {
+                  image: imageDataUrl,
+                  width: 150,
+                  alignment: 'center'
+                },
+                {
+                  text: `Photo ${i + 1} de l'interrupteur`,
+                  alignment: 'center',
+                  italics: true,
+                  margin: [0, 5, 0, 20]
+                }
+              ],
+              margin: [0, 10, 0, 20]
+            };
+            content.push(stackItem);
+          }
+        }
+        return content;
+      })(),
+      
+      // Cable
+      { text: 'Cable', style: 'sectionTitle' },
+      {
+        layout: 'lightHorizontalLines',
+        table: {
+          headerRows: 1,
+          widths: ['*', '*'],
+          body: [
+            [{ text: 'Paramètre', style: 'tableHeader' }, { text: 'Valeur', style: 'tableHeader' }],
+            ['Longueur', data.cableLongueur || ''],
+            ['Section', data.cableSection || ''],
+            ['Type', data.cableType || ''],
+            ['Mode de pose', data.cableModePose || ''],
+            ['Nb circuit adjacent', data.cableNbCircuitAdjacent || '']
+          ]
+        },
+        margin: [0, 0, 0, 15]
+      },
+      
+      // Cable Photos
+      {
+        text: 'Photos du cable:',
+        style: 'subheader',
+        margin: [0, 10, 0, 5]
+      },
+      ...await (async () => {
+        const content: Content[] = [];
+        if (data.cablePhotos && data.cablePhotos.length > 0) {
+          for (let i = 0; i < Math.min(data.cablePhotos.length, 2); i++) {
+            const photo = data.cablePhotos[i];
+            if (!photo) continue;
+            
+            let imageDataUrl: string;
+            if (photo instanceof File) {
+              const reader = new FileReader();
+              imageDataUrl = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(photo);
+              });
+            } else {
+              imageDataUrl = photo;
+            }
+            
+            const stackItem: ContentStack = {
+              stack: [
+                {
+                  image: imageDataUrl,
+                  width: 150,
+                  alignment: 'center'
+                },
+                {
+                  text: `Photo ${i + 1} du cable`,
+                  alignment: 'center',
+                  italics: true,
+                  margin: [0, 5, 0, 20]
+                }
+              ],
+              margin: [0, 10, 0, 20]
+            };
+            content.push(stackItem);
+          }
+        }
+        return content;
+      })(),
+      
+      // Borne
+      { text: 'Borne', style: 'sectionTitle' },
+      {
+        layout: 'lightHorizontalLines',
+        table: {
+          headerRows: 1,
+          widths: ['*', '*'],
+          body: [
+            [{ text: 'Paramètre', style: 'tableHeader' }, { text: 'Valeur', style: 'tableHeader' }],
+            ['Puissance', data.bornePuissance ? `${data.bornePuissance}` : '']
+          ]
+        },
+        margin: [0, 0, 0, 15]
+      },
+      
+      // Borne Photos
+      {
+        text: 'Photos de la borne:',
+        style: 'subheader',
+        margin: [0, 10, 0, 5]
+      },
+      ...await (async () => {
+        const content: Content[] = [];
+        if (data.bornePhotos && data.bornePhotos.length > 0) {
+          for (let i = 0; i < Math.min(data.bornePhotos.length, 2); i++) {
+            const photo = data.bornePhotos[i];
+            if (!photo) continue;
+            
+            let imageDataUrl: string;
+            if (photo instanceof File) {
+              const reader = new FileReader();
+              imageDataUrl = await new Promise<string>((resolve) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(photo);
+              });
+            } else {
+              imageDataUrl = photo;
+            }
+            
+            const stackItem: ContentStack = {
+              stack: [
+                {
+                  image: imageDataUrl,
+                  width: 150,
+                  alignment: 'center'
+                },
+                {
+                  text: `Photo ${i + 1} de la borne`,
+                  alignment: 'center',
+                  italics: true,
+                  margin: [0, 5, 0, 20]
+                }
+              ],
+              margin: [0, 10, 0, 20]
+            };
+            content.push(stackItem);
+          }
+        }
+        return content;
+      })(),
+      
+      // Remarques
+      ...await getCommonContent(data),
+      
+      // Footer with date
+      {
+        text: `Date d'intervention: ${date.formatDate(new Date(), 'DD/MM/YYYY')}`,
+        margin: [0, 30, 0, 0],
+        alignment: 'right' as const
+      }
+    ]
   };
 
-  const pdfMakeInstance = await initPdfMake();
-  return pdfMakeInstance.createPdf(docDefinition);
+  return pdfMake.createPdf(documentDefinition);
 };

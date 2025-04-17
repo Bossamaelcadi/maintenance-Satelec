@@ -10,7 +10,7 @@
           <q-input outlined v-model="formData.site" label="Site" />
         </div>
         <div class="col-12 col-md-6">
-          <q-input outlined v-model="formData.nomTGBT" label="Nom du TGBT" />
+          <q-input outlined v-model="formData.nomTD" label="Nom du TD" />
         </div>
         <div class="col-12">
           <q-file outlined v-model="formData.photos" label="Photos (max 2)" accept="image/*" multiple counter max-files="2">
@@ -98,7 +98,7 @@
 import { ref } from 'vue';
 import { date } from 'quasar';
 import type { QTableColumn } from 'quasar';
-import { generateTGBTPDF } from 'src/services/pdfGenerator';
+import { generateTDPDF } from 'src/services/pdfGenerator';
 import SignaturePad from 'src/components/SignaturePad.vue';
 
 const columns: QTableColumn[] = [
@@ -121,7 +121,7 @@ const columns: QTableColumn[] = [
 ];
 
 const controles = ref([
-  { prestation: 'Contrôle visuel de l\'état du TGBT', status: 0 },
+  { prestation: 'Contrôle visuel de l\'état du TD', status: 0 },
   { prestation: 'Contrôle étiquetage / repérage', status: 0 },
   { prestation: 'Contrôle visuel de l\'état des câbles HT/BT sur les divers départs', status: 0 },
   { prestation: 'Contrôle visuel des MALT (1 connectique par point)', status: 0 },
@@ -150,12 +150,12 @@ const generatePDF = async () => {
     }
   }
   
-  const pdfDoc = await generateTGBTPDF({
+  const pdfDoc = await generateTDPDF({
     ...formData.value,
     controles: controles.value.map(c => ({ ...c, type: 'toggle' }))
   });
   await new Promise<void>((resolve) => {
-    const filename = `rapport-maintenance-tgbt_${date.formatDate(new Date(), 'YYYY-MM-DD_HH-mm')}.pdf`;
+    const filename = `rapport-maintenance-td_${date.formatDate(new Date(), 'YYYY-MM-DD_HH-mm')}.pdf`;
     pdfDoc.download(filename);
     resolve();
   });
@@ -166,7 +166,7 @@ const signaturePadRef = ref<InstanceType<typeof SignaturePad> | null>(null);
 const formData = ref({
   client: '',
   site: '',
-  nomTGBT: '',
+  nomTD: '',
   photos: [],
   remarques: '',
   signature: ''
@@ -201,27 +201,6 @@ const removePhoto = (index: number): void => {
 
   .status-cell {
     padding: 4px !important;
-    width: 60px;
-  }
-
-  :deep(.q-table thead tr) {
-    height: 40px;
-  }
-
-  :deep(.q-table tbody td) {
-    height: auto;
-  }
-
-  :deep(.q-table__container) {
-    max-width: 100vw;
-  }
-
-  :deep(.q-table) {
-    max-width: 100%;
-  }
-
-  :deep(.q-table td) {
-    max-width: none;
   }
 }
 </style>

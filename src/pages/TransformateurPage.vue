@@ -16,11 +16,20 @@
           <q-input outlined v-model="formData.puissance" label="Puissance" />
         </div>
         <div class="col-12">
-          <q-file outlined v-model="formData.photo" label="Photo" accept="image/*">
+          <q-file outlined v-model="formData.photos" label="Photos (max 2)" accept="image/*" multiple counter max-files="2">
             <template v-slot:prepend>
               <q-icon name="attach_file" />
             </template>
           </q-file>
+          <div class="row q-mt-sm" v-if="formData.photos && formData.photos.length > 0">
+            <div class="col-6 col-sm-4 q-pa-xs" v-for="(photo, index) in formData.photos" :key="index">
+              <q-img :src="getPhotoPreviewUrl(photo)" style="height: 100px; width: 100%" fit="cover" class="rounded-borders">
+                <div class="absolute-top-right">
+                  <q-btn round flat dense icon="close" color="white" class="bg-grey-8" @click="removePhoto(index)" />
+                </div>
+              </q-img>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -65,6 +74,15 @@
           rows="4"
         />
       </div>
+      
+      <!-- Pad de signature -->
+      <div class="q-mt-xl">
+        <SignaturePad
+          ref="signaturePadRef"
+          title="Signature du technicien"
+          @update:signature="updateSignature"
+        />
+      </div>
 
       <div class="q-mt-md flex justify-center">
         <q-btn
@@ -84,6 +102,7 @@ import { ref } from 'vue';
 import { date } from 'quasar';
 import type { QTableColumn } from 'quasar';
 import { generateTransformateurPDF } from 'src/services/pdfGenerator';
+import SignaturePad from 'src/components/SignaturePad.vue';
 
 const columns: QTableColumn[] = [
   {
@@ -120,7 +139,28 @@ const controles = ref([
   { prestation: 'Vérification absence de fuite', status: 0 }
 ]);
 
+const getPhotoPreviewUrl = (file: File): string => {
+  return URL.createObjectURL(file);
+};
+
+const removePhoto = (index: number): void => {
+  formData.value.photos.splice(index, 1);
+};
+
+// Mettre à jour la signature dans le formulaire
+const updateSignature = (signatureData: string | null) => {
+  formData.value.signature = signatureData || '';
+};
+
 const generatePDF = async () => {
+  // Mettre à jour la signature si elle existe dans le pad mais pas dans le formulaire
+  if (signaturePadRef.value && !formData.value.signature) {
+    const signatureImage = signaturePadRef.value.getSignatureImage();
+    if (signatureImage) {
+      formData.value.signature = signatureImage;
+    }
+  }
+  
   const pdfDoc = await generateTransformateurPDF({
     ...formData.value,
     controles: controles.value.map(c => ({ ...c, type: 'toggle' }))
@@ -132,13 +172,16 @@ const generatePDF = async () => {
   });
 };
 
+const signaturePadRef = ref<InstanceType<typeof SignaturePad> | null>(null);
+
 const formData = ref({
   client: '',
   site: '',
   nomTransformateur: '',
   puissance: '',
-  photo: null,
-  remarques: ''
+  photos: [],
+  remarques: '',
+  signature: ''
 });
 </script>
 

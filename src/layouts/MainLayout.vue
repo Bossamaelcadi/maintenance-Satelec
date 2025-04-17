@@ -11,8 +11,9 @@
           @click="toggleLeftDrawer"
         />
 
-        <q-toolbar-title>
-          Transformateur
+        <q-toolbar-title class="flex items-center">
+          <img src="/satelec-logo.svg" style="height: 30px; margin-right: 10px;" alt="Satelec Logo" />
+          Maintenance Satelec
         </q-toolbar-title>
       </q-toolbar>
     </q-header>
@@ -55,10 +56,26 @@
         />
         <EssentialLink
           v-bind="{
+            title: 'TD',
+            caption: 'Tableau de distribution',
+            icon: 'power',
+            link: { name: 'td' }
+          }"
+        />
+        <EssentialLink
+          v-bind="{
             title: 'Borne de recharge',
             caption: 'Contrôle de la borne',
             icon: 'power',
             link: { name: 'borne-de-recharge' }
+          }"
+        />
+        <EssentialLink
+          v-bind="{
+            title: 'Borne IRVE',
+            caption: 'Contrôle de la borne',
+            icon: 'power',
+            link: { name: 'borne-irve' }
           }"
         />
         <EssentialLink

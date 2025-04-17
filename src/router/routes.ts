@@ -21,6 +21,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('pages/TGBTPage.vue')
       },
       {
+        path: 'td',
+        name: 'td',
+        component: () => import('pages/TDPage.vue')
+      },
+      {
         path: 'borne-de-recharge',
         name: 'borne-de-recharge',
         component: () => import('pages/BorneDeChargePage.vue')
@@ -29,6 +34,11 @@ const routes: RouteRecordRaw[] = [
         path: 'historique-pdf',
         name: 'historique-pdf',
         component: () => import('pages/HistoriquePDF.vue')
+      },
+      {
+        path: 'borne-irve',
+        name: 'borne-irve',
+        component: () => import('pages/BorneIRVEPage.vue')
       }
     ],
   },
